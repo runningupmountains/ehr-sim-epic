@@ -4,6 +4,30 @@ A lightweight external EHR simulator built with FastAPI and PostgreSQL. Designed
 
 This project has no connection to the Curosana database. All chart data lives entirely in its own separate Postgres database.
 
+Live and fully operational. Here's the summary:
+
+Deployed: ehr-sim-epic-dev
+URL: https://tfpkasbci3.us-west-2.awsapprunner.com
+DOCS: https://tfpkasbci3.us-west-2.awsapprunner.com/docs
+Region: us-west-2
+
+## Resource	Name
+App Runner service	ehr-sim-epic-dev
+ECR repository	ehr-sim-epic-dev
+IAM role	AppRunnerECRAccessRole
+RDS database	ehr_sim_epic (existing)
+
+## To redeploy after code changes:
+
+docker buildx build --platform linux/amd64 \
+  --tag 710074042372.dkr.ecr.us-west-2.amazonaws.com/ehr-sim-epic-dev:latest \
+  --push .
+
+aws apprunner start-deployment \
+  --service-arn arn:aws:apprunner:us-west-2:710074042372:service/ehr-sim-epic-dev/8c086113edd74aeba3a579fc7286e964 \
+  --region us-west-2
+ConnectHub can now point at https://tfpkasbci3.us-west-2.awsapprunner.com with x-api-key: eh8ce6b5e92b412fb4c46c8817dde122.
+
 ---
 
 ## Project Structure

@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session, selectinload
 
@@ -73,7 +74,8 @@ def get_notes_for_patient(
         .filter(ClinicalNote.patient_id == patient_id)
     )
     if since:
-        query = query.filter(ClinicalNote.signed_at >= since)
+        since_dt = datetime.fromisoformat(since).replace(tzinfo=timezone.utc)
+        query = query.filter(ClinicalNote.signed_at >= since_dt)
     return (
         query.order_by(ClinicalNote.signed_at.desc()).offset(offset).limit(limit).all()
     )
