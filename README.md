@@ -91,7 +91,7 @@ Set these environment variables first for convenience:
 
 ```bash
 export BASE=http://localhost:8001
-export KEY=dev-ehr-sim-key-change-in-production
+export KEY=eh8ce6b5e92b412fb4c46c8817dde122
 ```
 
 ### Health check
