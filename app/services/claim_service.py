@@ -14,6 +14,16 @@ def get_claim_by_number(db: Session, claim_number: str) -> Claim | None:
     return db.query(Claim).filter(Claim.claim_number == claim_number).first()
 
 
+def list_all_claims(db: Session, limit: int = 25, offset: int = 0) -> list[Claim]:
+    return (
+        db.query(Claim)
+        .order_by(Claim.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+
+
 def get_claims_for_encounter(
     db: Session,
     encounter_id: uuid.UUID,
