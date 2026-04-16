@@ -240,7 +240,6 @@ def patient_detail(request: Request, patient_id: uuid.UUID, db: Session = Depend
         .options(selectinload(ClinicalNote.provider))
         .filter(ClinicalNote.patient_id == patient_id)
         .order_by(ClinicalNote.signed_at.desc())
-        .limit(10)
         .all()
     )
     medications = (
@@ -255,7 +254,6 @@ def patient_detail(request: Request, patient_id: uuid.UUID, db: Session = Depend
         db.query(LabResult)
         .filter(LabResult.patient_id == patient_id)
         .order_by(LabResult.collected_at.desc())
-        .limit(20)
         .all()
     )
     documents = (
@@ -271,31 +269,36 @@ def patient_detail(request: Request, patient_id: uuid.UUID, db: Session = Depend
         .all()
     )
 
-    # Index claims by encounter_id for easy lookup in the template
-    claims_by_encounter: dict[str, list] = {}
-    for c in claims:
-        key = str(c.encounter_id)
-        claims_by_encounter.setdefault(key, []).append(c)
+    # Index child records by encounter_id string for template grouping
+    def _by_enc(items, id_attr="encounter_id") -> dict[str, list]:
+        d: dict[str, list] = {}
+        for item in items:
+            key = str(getattr(item, id_attr))
+            d.setdefault(key, []).append(item)
+        return d
 
     base_url = str(request.base_url).rstrip("/")
 
     return templates.TemplateResponse("admin/patient_detail.html", {
-        "request":              request,
-        "active":               "patients",
-        "patient":              patient,
-        "encounters":           encounters,
-        "notes":                notes,
-        "medications":          medications,
-        "allergies":            allergies,
-        "problems":             problems,
-        "labs":                 labs,
-        "documents":            documents,
-        "claims":               claims,
-        "claims_by_encounter":  claims_by_encounter,
-        "providers":            _all_providers(db),
-        "today":                _today(),
-        "base_url":             base_url,
-        "api_key":              settings.api_key,
+        "request":           request,
+        "active":            "patients",
+        "patient":           patient,
+        "encounters":        encounters,
+        "notes":             notes,
+        "notes_by_enc":      _by_enc(notes),
+        "medications":       medications,
+        "allergies":         allergies,
+        "problems":          problems,
+        "labs":              labs,
+        "labs_by_enc":       _by_enc(labs),
+        "documents":         documents,
+        "docs_by_enc":       _by_enc(documents),
+        "claims":            claims,
+        "claims_by_enc":     _by_enc(claims),
+        "providers":         _all_providers(db),
+        "today":             _today(),
+        "base_url":          base_url,
+        "api_key":           settings.api_key,
     })
 
 

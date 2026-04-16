@@ -57,8 +57,8 @@
   <div class="stat-card"><div class="stat-value" style="font-size:20px">{{ notes|length }}</div><div class="stat-label">Notes</div></div>
   <div class="stat-card"><div class="stat-value" style="font-size:20px">{{ medications|length }}</div><div class="stat-label">Medications</div></div>
   <div class="stat-card"><div class="stat-value" style="font-size:20px">{{ labs|length }}</div><div class="stat-label">Labs</div></div>
+  <div class="stat-card"><div class="stat-value" style="font-size:20px">{{ claims|length }}</div><div class="stat-label">Claims</div></div>
   <div class="stat-card"><div class="stat-value" style="font-size:20px">{{ allergies|length }}</div><div class="stat-label">Allergies</div></div>
-  <div class="stat-card"><div class="stat-value" style="font-size:20px">{{ problems|length }}</div><div class="stat-label">Problems</div></div>
 </div>
 
 {# ── API test strip ── #}
@@ -77,33 +77,361 @@
   </div>
 </div>
 
-{# ── Encounters ── #}
+{# ══════════════════════════════════════════════════════════════════
+   ENCOUNTERS  (each row collapses to show nested children)
+   ══════════════════════════════════════════════════════════════════ #}
 <div class="card">
   <div class="card-header">
     <h2>Encounters ({{ encounters|length }})</h2>
+    <span class="text-muted text-sm" style="font-weight:400">Click a row to expand notes, labs, claims, and documents</span>
   </div>
-  <div class="table-wrap">
-    <table>
-      <thead><tr>
-        <th>Date</th><th>CSN</th><th>Type</th><th>Department</th><th>Provider</th><th>Reason</th><th>Status</th>
-      </tr></thead>
-      <tbody>
-        {% for e in encounters %}
-        <tr>
-          <td>{{ e.encounter_date }}</td>
-          <td><span class="font-mono text-xs">{{ e.external_csn }}</span></td>
-          <td>{{ e.encounter_type }}</td>
-          <td class="text-muted">{{ e.department or '—' }}</td>
-          <td class="text-muted">{% if e.provider %}Dr. {{ e.provider.last_name }}{% else %}—{% endif %}</td>
-          <td class="text-muted" style="max-width:220px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ e.reason_for_visit or '—' }}</td>
-          <td><span class="badge badge-completed">{{ e.status }}</span></td>
-        </tr>
+
+  {% for e in encounters %}
+  {% set enc_key = e.encounter_id | string %}
+  {% set enc_notes  = notes_by_enc.get(enc_key, []) %}
+  {% set enc_labs   = labs_by_enc.get(enc_key, []) %}
+  {% set enc_claims = claims_by_enc.get(enc_key, []) %}
+  {% set enc_docs   = docs_by_enc.get(enc_key, []) %}
+  {% set child_count = enc_notes|length + enc_labs|length + enc_claims|length + enc_docs|length %}
+
+  <details class="encounter-row">
+    <summary class="encounter-summary">
+      <div class="enc-summary-grid">
+        <span class="enc-date">{{ e.encounter_date }}</span>
+        <span class="font-mono text-xs text-muted">{{ e.external_csn }}</span>
+        <span class="enc-type">{{ e.encounter_type }}{% if e.visit_type %} <span class="text-muted">· {{ e.visit_type }}</span>{% endif %}</span>
+        <span class="text-muted text-sm">{{ e.department or '—' }}</span>
+        <span class="text-muted text-sm">{% if e.provider %}Dr. {{ e.provider.last_name }}{% else %}—{% endif %}</span>
+        <span class="enc-reason text-muted text-sm">{{ e.reason_for_visit or '—' }}</span>
+        <span class="enc-badges">
+          <span class="badge badge-completed">{{ e.status }}</span>
+          {% if child_count > 0 %}
+          <span class="badge badge-info" title="Related records">{{ child_count }} records</span>
+          {% endif %}
+        </span>
+      </div>
+    </summary>
+
+    <div class="encounter-children">
+
+      {# ── Notes ── #}
+      <div class="enc-section">
+        <div class="enc-section-header">
+          <span class="enc-section-title">Notes ({{ enc_notes|length }})</span>
+        </div>
+        {% if enc_notes %}
+        <table class="enc-table">
+          <thead><tr><th>Signed</th><th>Type</th><th>Title</th><th>Provider</th><th>Preview</th></tr></thead>
+          <tbody>
+            {% for n in enc_notes %}
+            <tr>
+              <td class="text-muted text-sm">{{ n.signed_at.strftime('%Y-%m-%d') if n.signed_at else '—' }}</td>
+              <td><span class="badge badge-info">{{ n.note_type }}</span></td>
+              <td style="font-weight:600; font-size:13px">{{ n.title }}</td>
+              <td class="text-muted">{% if n.provider %}Dr. {{ n.provider.last_name }}{% else %}—{% endif %}</td>
+              <td><div class="note-body">{{ n.body_text[:120] }}…</div></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
         {% else %}
-        <tr><td colspan="7" class="empty">No encounters yet.</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
+        <p class="enc-empty">No notes for this encounter.</p>
+        {% endif %}
+        <details class="quick-add enc-quick-add">
+          <summary>+ Add Note</summary>
+          <div class="quick-form">
+            <form method="post" action="/admin/patients/{{ patient.patient_id }}/notes">
+              <input type="hidden" name="encounter_id" value="{{ e.encounter_id }}">
+              <div class="form-grid">
+                <div class="form-group">
+                  <label>Note Type</label>
+                  <select name="note_type" required>
+                    {% for t in ['Office Visit Note','Cardiology Note','Orthopedic Note','Dermatology Note',
+                                 'Urgent Care Note','Annual Exam Note','Specialist Consultation','Discharge Summary'] %}
+                    <option>{{ t }}</option>{% endfor %}
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label>Provider</label>
+                  <select name="provider_id">
+                    <option value="">— None —</option>
+                    {% for prov in providers %}
+                    <option value="{{ prov.provider_id }}"
+                      {% if e.provider_id == prov.provider_id %}selected{% endif %}>
+                      Dr. {{ prov.first_name }} {{ prov.last_name }}
+                    </option>
+                    {% endfor %}
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label>Signed At</label>
+                  <input name="signed_at" type="datetime-local" value="{{ e.encounter_date }}T09:00">
+                </div>
+                <div class="form-group form-full">
+                  <label>Title</label>
+                  <input name="title" type="text" required placeholder="e.g. Office Visit Note — Hypertension">
+                </div>
+                <div class="form-group form-full">
+                  <label>Note Body</label>
+                  <textarea name="body_text" rows="6" required
+                    placeholder="CHIEF COMPLAINT:&#10;&#10;HPI:&#10;&#10;ASSESSMENT:&#10;&#10;PLAN:"></textarea>
+                </div>
+              </div>
+              <div class="form-actions">
+                <button class="btn btn-primary btn-sm" type="submit">Add Note</button>
+              </div>
+            </form>
+          </div>
+        </details>
+      </div>
+
+      {# ── Labs ── #}
+      <div class="enc-section">
+        <div class="enc-section-header">
+          <span class="enc-section-title">Lab Results ({{ enc_labs|length }})</span>
+        </div>
+        {% if enc_labs %}
+        <table class="enc-table">
+          <thead><tr><th>Collected</th><th>Test</th><th>Result</th><th>Unit</th><th>Ref Range</th><th>Flag</th></tr></thead>
+          <tbody>
+            {% for l in enc_labs %}
+            <tr>
+              <td class="text-muted text-sm">{{ l.collected_at[:10] if l.collected_at else '—' }}</td>
+              <td style="font-weight:600">{{ l.test_name }}</td>
+              <td>{{ l.result_value or '—' }}</td>
+              <td class="text-muted">{{ l.unit or '' }}</td>
+              <td class="text-muted text-xs">{{ l.reference_range or '—' }}</td>
+              <td>
+                {% if l.abnormal_flag in ('HH','LL') %}<span class="badge badge-critical">{{ l.abnormal_flag }}</span>
+                {% elif l.abnormal_flag == 'H' %}<span class="badge badge-high">H</span>
+                {% elif l.abnormal_flag == 'L' %}<span class="badge badge-low">L</span>
+                {% else %}<span class="badge badge-normal">N</span>{% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <p class="enc-empty">No labs for this encounter.</p>
+        {% endif %}
+        <details class="quick-add enc-quick-add">
+          <summary>+ Add Lab Result</summary>
+          <div class="quick-form">
+            <form method="post" action="/admin/patients/{{ patient.patient_id }}/labs">
+              <input type="hidden" name="encounter_id" value="{{ e.encounter_id }}">
+              <div class="form-grid">
+                <div class="form-group">
+                  <label>Test Name</label>
+                  <input name="test_name" type="text" required list="common-tests-{{ e.encounter_id }}"
+                         placeholder="e.g. Hemoglobin A1c">
+                  <datalist id="common-tests-{{ e.encounter_id }}">
+                    {% for t in ['Hemoglobin A1c','Fasting Glucose','BMP - Creatinine','BMP - Sodium',
+                                 'BMP - Potassium','Lipid Panel - LDL','Lipid Panel - HDL','CBC - WBC',
+                                 'TSH','Free T4','BNP','Troponin I'] %}
+                    <option value="{{ t }}">{% endfor %}
+                  </datalist>
+                </div>
+                <div class="form-group">
+                  <label>Collected At</label>
+                  <input name="collected_at" type="datetime-local" value="{{ e.encounter_date }}T08:00">
+                </div>
+                <div class="form-group">
+                  <label>Result Value</label>
+                  <input name="result_value" type="text" placeholder="e.g. 7.8">
+                </div>
+                <div class="form-group">
+                  <label>Unit</label>
+                  <input name="unit" type="text" placeholder="e.g. %">
+                </div>
+                <div class="form-group">
+                  <label>Reference Range</label>
+                  <input name="reference_range" type="text" placeholder="e.g. 4.0–5.6">
+                </div>
+                <div class="form-group">
+                  <label>Abnormal Flag</label>
+                  <select name="abnormal_flag">
+                    <option value="N">N — Normal</option>
+                    <option value="H">H — High</option>
+                    <option value="L">L — Low</option>
+                    <option value="HH">HH — Critical High</option>
+                    <option value="LL">LL — Critical Low</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label>Ordering Provider</label>
+                  <select name="ordering_provider_id">
+                    <option value="">— None —</option>
+                    {% for prov in providers %}
+                    <option value="{{ prov.provider_id }}"
+                      {% if e.provider_id == prov.provider_id %}selected{% endif %}>
+                      Dr. {{ prov.first_name }} {{ prov.last_name }}
+                    </option>
+                    {% endfor %}
+                  </select>
+                </div>
+              </div>
+              <div class="form-actions">
+                <button class="btn btn-primary btn-sm" type="submit">Add Lab Result</button>
+              </div>
+            </form>
+          </div>
+        </details>
+      </div>
+
+      {# ── Claims ── #}
+      <div class="enc-section">
+        <div class="enc-section-header">
+          <span class="enc-section-title">Claims ({{ enc_claims|length }})</span>
+        </div>
+        {% if enc_claims %}
+        <table class="enc-table">
+          <thead><tr><th>Claim #</th><th>Payer</th><th>Status</th><th>Billed</th><th>Allowed</th><th>Paid</th><th>ICD-10</th><th></th></tr></thead>
+          <tbody>
+            {% for c in enc_claims %}
+            <tr>
+              <td><span class="font-mono text-xs">{{ c.claim_number }}</span></td>
+              <td class="text-muted text-sm">{{ c.payer_name or '—' }}</td>
+              <td>
+                {% if c.claim_status == 'paid' %}<span class="badge badge-active">Paid</span>
+                {% elif c.claim_status == 'denied' %}<span class="badge badge-high">Denied</span>
+                {% elif c.claim_status == 'submitted' %}<span class="badge badge-info">Submitted</span>
+                {% elif c.claim_status == 'accepted' %}<span class="badge badge-completed">Accepted</span>
+                {% elif c.claim_status == 'pending' %}<span class="badge badge-warning">Pending</span>
+                {% elif c.claim_status == 'void' %}<span class="badge badge-inactive">Void</span>
+                {% else %}<span class="badge badge-normal">{{ c.claim_status|capitalize }}</span>{% endif %}
+              </td>
+              <td class="text-sm">{% if c.billed_amount is not none %}${{ '%.2f'|format(c.billed_amount) }}{% else %}—{% endif %}</td>
+              <td class="text-sm">{% if c.allowed_amount is not none %}${{ '%.2f'|format(c.allowed_amount) }}{% else %}—{% endif %}</td>
+              <td class="text-sm">{% if c.paid_amount is not none %}${{ '%.2f'|format(c.paid_amount) }}{% else %}—{% endif %}</td>
+              <td class="font-mono text-xs">{{ c.icd10_primary or '—' }}</td>
+              <td><a class="btn btn-secondary btn-xs" href="/admin/claims/{{ c.claim_id }}/edit">Edit</a></td>
+            </tr>
+            {% if c.denial_reason %}
+            <tr style="background:#fef2f2">
+              <td colspan="8" class="text-sm" style="color:#991b1b; padding:4px 12px">
+                ⚠ Denial reason: {{ c.denial_reason }}
+              </td>
+            </tr>
+            {% endif %}
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <p class="enc-empty">No claims for this encounter.</p>
+        {% endif %}
+        <details class="quick-add enc-quick-add">
+          <summary>+ Add Claim</summary>
+          <div class="quick-form">
+            <form method="post" action="/admin/patients/{{ patient.patient_id }}/claims">
+              <input type="hidden" name="encounter_id" value="{{ e.encounter_id }}">
+              <div class="form-grid">
+                <div class="form-group">
+                  <label>Service Date</label>
+                  <input name="service_date" type="date" required value="{{ e.encounter_date }}">
+                </div>
+                <div class="form-group">
+                  <label>Claim Status</label>
+                  <select name="claim_status">
+                    {% for s in ['draft','submitted','accepted','pending','denied','paid','void'] %}
+                    <option value="{{ s }}">{{ s|capitalize }}</option>
+                    {% endfor %}
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label>Payer / Insurance Plan</label>
+                  <input name="payer_name" type="text" placeholder="e.g. BlueCross BlueShield PPO"
+                         value="{{ patient.payer_name or '' }}">
+                </div>
+                <div class="form-group">
+                  <label>Member ID</label>
+                  <input name="member_id" type="text" value="{{ patient.member_id or '' }}">
+                </div>
+                <div class="form-group">
+                  <label>Primary ICD-10</label>
+                  <input name="icd10_primary" type="text" placeholder="e.g. I10">
+                </div>
+                <div class="form-group">
+                  <label>CPT Codes</label>
+                  <input name="cpt_codes" type="text" placeholder="e.g. 99213, 93000">
+                </div>
+                <div class="form-group">
+                  <label>Billed ($)</label>
+                  <input name="billed_amount" type="number" step="0.01" min="0" placeholder="0.00">
+                </div>
+                <div class="form-group">
+                  <label>Paid ($)</label>
+                  <input name="paid_amount" type="number" step="0.01" min="0" placeholder="0.00">
+                </div>
+              </div>
+              <div class="form-actions">
+                <button class="btn btn-primary btn-sm" type="submit">Add Claim</button>
+              </div>
+            </form>
+          </div>
+        </details>
+      </div>
+
+      {# ── Documents ── #}
+      <div class="enc-section enc-section-last">
+        <div class="enc-section-header">
+          <span class="enc-section-title">Documents ({{ enc_docs|length }})</span>
+        </div>
+        {% if enc_docs %}
+        <table class="enc-table">
+          <thead><tr><th>Type</th><th>Title</th><th>Storage Key</th><th>Date</th></tr></thead>
+          <tbody>
+            {% for d in enc_docs %}
+            <tr>
+              <td><span class="badge badge-info">{{ d.document_type }}</span></td>
+              <td style="font-weight:600">{{ d.title }}</td>
+              <td class="text-muted text-xs">{{ d.storage_key or '—' }}</td>
+              <td class="text-muted text-sm">{{ d.created_at.strftime('%Y-%m-%d') if d.created_at else '—' }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <p class="enc-empty">No documents for this encounter.</p>
+        {% endif %}
+        <details class="quick-add enc-quick-add">
+          <summary>+ Add Document</summary>
+          <div class="quick-form">
+            <form method="post" action="/admin/patients/{{ patient.patient_id }}/documents">
+              <input type="hidden" name="encounter_id" value="{{ e.encounter_id }}">
+              <div class="form-grid">
+                <div class="form-group">
+                  <label>Document Type</label>
+                  <select name="document_type" required>
+                    {% for t in ['CCD Summary','Discharge Summary','Referral','Prior Authorization',
+                                 'Radiology Report','Lab Report','ECG Report','Pulmonary Function Test',
+                                 'Cardiology Report','Operative Report','Other'] %}
+                    <option>{{ t }}</option>{% endfor %}
+                  </select>
+                </div>
+                <div class="form-group form-full">
+                  <label>Title</label>
+                  <input name="title" type="text" required placeholder="e.g. Discharge Summary — CHF">
+                </div>
+                <div class="form-group form-full">
+                  <label>Storage Key / Path (optional)</label>
+                  <input name="storage_key" type="text" placeholder="e.g. docs/E100001/discharge-2026-04.pdf">
+                </div>
+              </div>
+              <div class="form-actions">
+                <button class="btn btn-primary btn-sm" type="submit">Add Document</button>
+              </div>
+            </form>
+          </div>
+        </details>
+      </div>
+
+    </div>{# /encounter-children #}
+  </details>
+  {% else %}
+  <div class="empty" style="padding:20px">No encounters yet.</div>
+  {% endfor %}
+
+  {# ── Add Encounter ── #}
   <details class="quick-add">
     <summary>Quick Add Encounter</summary>
     <div class="quick-form">
@@ -157,202 +485,9 @@
   </details>
 </div>
 
-{# ── Clinical Notes ── #}
-<div class="card">
-  <div class="card-header">
-    <h2>Recent Notes ({{ notes|length }})</h2>
-  </div>
-  <div class="table-wrap">
-    <table>
-      <thead><tr>
-        <th>Signed</th><th>Type</th><th>Title</th><th>Provider</th><th>Preview</th>
-      </tr></thead>
-      <tbody>
-        {% for n in notes %}
-        <tr>
-          <td class="text-muted text-sm">{{ n.signed_at.strftime('%Y-%m-%d') if n.signed_at else '—' }}</td>
-          <td><span class="badge badge-info">{{ n.note_type }}</span></td>
-          <td style="font-weight:600; font-size:13px">{{ n.title }}</td>
-          <td class="text-muted">{% if n.provider %}Dr. {{ n.provider.last_name }}{% else %}—{% endif %}</td>
-          <td><div class="note-body">{{ n.body_text[:140] }}…</div></td>
-        </tr>
-        {% else %}
-        <tr><td colspan="5" class="empty">No notes yet.</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-  <details class="quick-add">
-    <summary>Quick Add Note</summary>
-    <div class="quick-form">
-      <form method="post" action="/admin/patients/{{ patient.patient_id }}/notes">
-        <div class="form-grid">
-          <div class="form-group">
-            <label>Note Type</label>
-            <select name="note_type" required>
-              {% for t in ['Office Visit Note','Cardiology Note','Orthopedic Note','Dermatology Note',
-                           'Urgent Care Note','Annual Exam Note','Specialist Consultation','Discharge Summary'] %}
-              <option>{{ t }}</option>{% endfor %}
-            </select>
-          </div>
-          <div class="form-group">
-            <label>Provider</label>
-            <select name="provider_id">
-              <option value="">— None —</option>
-              {% for prov in providers %}
-              <option value="{{ prov.provider_id }}"
-                {% if patient.primary_provider_id == prov.provider_id %}selected{% endif %}>
-                Dr. {{ prov.first_name }} {{ prov.last_name }}
-              </option>
-              {% endfor %}
-            </select>
-          </div>
-          <div class="form-group">
-            <label>Encounter</label>
-            <select name="encounter_id" required>
-              {% for e in encounters %}
-              <option value="{{ e.encounter_id }}">{{ e.encounter_date }} — {{ e.reason_for_visit or e.encounter_type }}</option>
-              {% endfor %}
-            </select>
-          </div>
-          <div class="form-group">
-            <label>Signed At</label>
-            <input name="signed_at" type="datetime-local" value="{{ today }}T09:00">
-          </div>
-          <div class="form-group form-full">
-            <label>Title</label>
-            <input name="title" type="text" required placeholder="e.g. Office Visit Note — Hypertension">
-          </div>
-          <div class="form-group form-full">
-            <label>Note Body</label>
-            <textarea name="body_text" rows="8" required
-              placeholder="CHIEF COMPLAINT:&#10;&#10;HPI:&#10;&#10;REVIEW OF SYSTEMS:&#10;&#10;PHYSICAL EXAM:&#10;&#10;ASSESSMENT:&#10;1. &#10;&#10;PLAN:&#10;1. "></textarea>
-          </div>
-        </div>
-        <div class="form-actions">
-          <button class="btn btn-primary btn-sm" type="submit">Add Note</button>
-        </div>
-      </form>
-    </div>
-  </details>
-</div>
-
-{# ── Lab Results ── #}
-<div class="card">
-  <div class="card-header">
-    <h2>Lab Results ({{ labs|length }})</h2>
-  </div>
-  <div class="table-wrap">
-    <table>
-      <thead><tr>
-        <th>Collected</th><th>Test</th><th>Result</th><th>Unit</th><th>Ref Range</th><th>Flag</th><th>Status</th>
-      </tr></thead>
-      <tbody>
-        {% for l in labs %}
-        <tr>
-          <td class="text-muted text-sm">{{ l.collected_at[:10] if l.collected_at else '—' }}</td>
-          <td style="font-weight:600">{{ l.test_name }}</td>
-          <td>{{ l.result_value or '—' }}</td>
-          <td class="text-muted">{{ l.unit or '' }}</td>
-          <td class="text-muted text-xs">{{ l.reference_range or '—' }}</td>
-          <td>
-            {% if l.abnormal_flag in ('HH','LL') %}
-              <span class="badge badge-critical">{{ l.abnormal_flag }}</span>
-            {% elif l.abnormal_flag == 'H' %}
-              <span class="badge badge-high">H</span>
-            {% elif l.abnormal_flag == 'L' %}
-              <span class="badge badge-low">L</span>
-            {% else %}
-              <span class="badge badge-normal">N</span>
-            {% endif %}
-          </td>
-          <td><span class="badge badge-completed">{{ l.result_status }}</span></td>
-        </tr>
-        {% else %}
-        <tr><td colspan="7" class="empty">No lab results yet.</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-  <details class="quick-add">
-    <summary>Quick Add Lab Result</summary>
-    <div class="quick-form">
-      <form method="post" action="/admin/patients/{{ patient.patient_id }}/labs">
-        <div class="form-grid">
-          <div class="form-group">
-            <label>Test Name</label>
-            <input name="test_name" type="text" required list="common-tests"
-                   placeholder="e.g. Hemoglobin A1c">
-            <datalist id="common-tests">
-              {% for t in ['Hemoglobin A1c','Fasting Glucose','BMP - Creatinine','BMP - Sodium',
-                           'BMP - Potassium','Lipid Panel - LDL','Lipid Panel - HDL','CBC - WBC',
-                           'TSH','Free T4','BNP','Troponin I'] %}
-              <option value="{{ t }}">{% endfor %}
-            </datalist>
-          </div>
-          <div class="form-group">
-            <label>Collected At</label>
-            <input name="collected_at" type="datetime-local" value="{{ today }}T08:00">
-          </div>
-          <div class="form-group">
-            <label>Result Value</label>
-            <input name="result_value" type="text" placeholder="e.g. 7.8">
-          </div>
-          <div class="form-group">
-            <label>Unit</label>
-            <input name="unit" type="text" placeholder="e.g. %">
-          </div>
-          <div class="form-group">
-            <label>Reference Range</label>
-            <input name="reference_range" type="text" placeholder="e.g. 4.0–5.6">
-          </div>
-          <div class="form-group">
-            <label>Abnormal Flag</label>
-            <select name="abnormal_flag">
-              <option value="N">N — Normal</option>
-              <option value="H">H — High</option>
-              <option value="L">L — Low</option>
-              <option value="HH">HH — Critical High</option>
-              <option value="LL">LL — Critical Low</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label>Result Status</label>
-            <select name="result_status">
-              <option value="final">Final</option>
-              <option value="preliminary">Preliminary</option>
-              <option value="corrected">Corrected</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label>Ordering Provider</label>
-            <select name="ordering_provider_id">
-              <option value="">— None —</option>
-              {% for prov in providers %}
-              <option value="{{ prov.provider_id }}"
-                {% if patient.primary_provider_id == prov.provider_id %}selected{% endif %}>
-                Dr. {{ prov.first_name }} {{ prov.last_name }}
-              </option>
-              {% endfor %}
-            </select>
-          </div>
-          <div class="form-group">
-            <label>Encounter (optional)</label>
-            <select name="encounter_id">
-              <option value="">— None —</option>
-              {% for e in encounters %}
-              <option value="{{ e.encounter_id }}">{{ e.encounter_date }} — {{ e.reason_for_visit or e.encounter_type }}</option>
-              {% endfor %}
-            </select>
-          </div>
-        </div>
-        <div class="form-actions">
-          <button class="btn btn-primary btn-sm" type="submit">Add Lab Result</button>
-        </div>
-      </form>
-    </div>
-  </details>
-</div>
+{# ══════════════════════════════════════════════════════════════════
+   PATIENT-LEVEL RECORDS  (not encounter-specific)
+   ══════════════════════════════════════════════════════════════════ #}
 
 {# ── Medications ── #}
 <div class="card">
@@ -549,187 +684,6 @@
         </div>
         <div class="form-actions">
           <button class="btn btn-primary btn-sm" type="submit">Add Problem</button>
-        </div>
-      </form>
-    </div>
-  </details>
-</div>
-
-{# ── Documents ── #}
-<div class="card">
-  <div class="card-header"><h2>Documents ({{ documents|length }})</h2></div>
-  <div class="table-wrap">
-    <table>
-      <thead><tr><th>Type</th><th>Title</th><th>Encounter</th><th>Storage Key</th><th>Date</th></tr></thead>
-      <tbody>
-        {% for d in documents %}
-        <tr>
-          <td><span class="badge badge-info">{{ d.document_type }}</span></td>
-          <td style="font-weight:600">{{ d.title }}</td>
-          <td class="text-muted text-xs font-mono">{{ d.encounter_id or '—' }}</td>
-          <td class="text-muted text-xs">{{ d.storage_key or '—' }}</td>
-          <td class="text-muted text-sm">{{ d.created_at.strftime('%Y-%m-%d') if d.created_at else '—' }}</td>
-        </tr>
-        {% else %}
-        <tr><td colspan="5" class="empty">No documents on record.</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-  <details class="quick-add">
-    <summary>Quick Add Document</summary>
-    <div class="quick-form">
-      <form method="post" action="/admin/patients/{{ patient.patient_id }}/documents">
-        <div class="form-grid">
-          <div class="form-group">
-            <label>Document Type</label>
-            <select name="document_type" required>
-              {% for t in ['CCD Summary','Discharge Summary','Referral','Prior Authorization',
-                           'Radiology Report','Lab Report','ECG Report','Pulmonary Function Test',
-                           'Cardiology Report','Operative Report','Other'] %}
-              <option>{{ t }}</option>{% endfor %}
-            </select>
-          </div>
-          <div class="form-group">
-            <label>Encounter (optional)</label>
-            <select name="encounter_id">
-              <option value="">— None —</option>
-              {% for e in encounters %}
-              <option value="{{ e.encounter_id }}">{{ e.encounter_date }} — {{ e.reason_for_visit or e.encounter_type }}</option>
-              {% endfor %}
-            </select>
-          </div>
-          <div class="form-group form-full">
-            <label>Title</label>
-            <input name="title" type="text" required placeholder="e.g. Discharge Summary — CHF">
-          </div>
-          <div class="form-group form-full">
-            <label>Storage Key / Path (optional)</label>
-            <input name="storage_key" type="text" placeholder="e.g. docs/E100001/discharge-2026-04.pdf">
-          </div>
-        </div>
-        <div class="form-actions">
-          <button class="btn btn-primary btn-sm" type="submit">Add Document</button>
-        </div>
-      </form>
-    </div>
-  </details>
-</div>
-
-{# ── Claims ── #}
-<div class="card">
-  <div class="card-header">
-    <h2>Claims ({{ claims|length }})</h2>
-  </div>
-  <div class="table-wrap">
-    <table>
-      <thead><tr>
-        <th>Claim #</th><th>Service Date</th><th>Encounter</th><th>Payer</th>
-        <th>Status</th><th>Billed</th><th>Paid</th><th></th>
-      </tr></thead>
-      <tbody>
-        {% for c in claims %}
-        {% set enc = encounters | selectattr('encounter_id', 'equalto', c.encounter_id) | first %}
-        <tr>
-          <td><span class="font-mono text-xs">{{ c.claim_number }}</span></td>
-          <td class="text-muted text-sm">{{ c.service_date }}</td>
-          <td class="text-muted text-xs">
-            {% if enc %}{{ enc.encounter_date }} — {{ enc.reason_for_visit or enc.encounter_type }}{% else %}—{% endif %}
-          </td>
-          <td class="text-muted text-sm">{{ c.payer_name or '—' }}</td>
-          <td>
-            {% if c.claim_status == 'paid' %}<span class="badge badge-active">Paid</span>
-            {% elif c.claim_status == 'denied' %}<span class="badge badge-high">Denied</span>
-            {% elif c.claim_status == 'submitted' %}<span class="badge badge-info">Submitted</span>
-            {% elif c.claim_status == 'accepted' %}<span class="badge badge-completed">Accepted</span>
-            {% elif c.claim_status == 'pending' %}<span class="badge badge-warning">Pending</span>
-            {% elif c.claim_status == 'void' %}<span class="badge badge-inactive">Void</span>
-            {% else %}<span class="badge badge-normal">{{ c.claim_status|capitalize }}</span>{% endif %}
-          </td>
-          <td class="text-sm">{% if c.billed_amount is not none %}${{ '%.2f'|format(c.billed_amount) }}{% else %}—{% endif %}</td>
-          <td class="text-sm">{% if c.paid_amount is not none %}${{ '%.2f'|format(c.paid_amount) }}{% else %}—{% endif %}</td>
-          <td><a class="btn btn-secondary btn-xs" href="/admin/claims/{{ c.claim_id }}/edit">Edit</a></td>
-        </tr>
-        {% else %}
-        <tr><td colspan="8" class="empty">No claims yet.</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-  <details class="quick-add">
-    <summary>Quick Add Claim</summary>
-    <div class="quick-form">
-      <form method="post" action="/admin/patients/{{ patient.patient_id }}/claims">
-        <div class="form-grid">
-          <div class="form-group">
-            <label>Encounter</label>
-            <select name="encounter_id" required>
-              {% for e in encounters %}
-              <option value="{{ e.encounter_id }}">{{ e.encounter_date }} — {{ e.reason_for_visit or e.encounter_type }}</option>
-              {% endfor %}
-            </select>
-          </div>
-          <div class="form-group">
-            <label>Service Date</label>
-            <input name="service_date" type="date" required value="{{ today }}">
-          </div>
-          <div class="form-group">
-            <label>Claim Status</label>
-            <select name="claim_status">
-              {% for s in ['draft','submitted','accepted','pending','denied','paid','void'] %}
-              <option value="{{ s }}">{{ s|capitalize }}</option>
-              {% endfor %}
-            </select>
-          </div>
-          <div class="form-group">
-            <label>Payer / Insurance Plan</label>
-            <input name="payer_name" type="text" placeholder="e.g. BlueCross BlueShield PPO"
-                   value="{{ patient.payer_name or '' }}">
-          </div>
-          <div class="form-group">
-            <label>Member ID</label>
-            <input name="member_id" type="text" placeholder="e.g. MBR-00123456"
-                   value="{{ patient.member_id or '' }}">
-          </div>
-          <div class="form-group">
-            <label>Primary ICD-10</label>
-            <input name="icd10_primary" type="text" placeholder="e.g. I10">
-          </div>
-          <div class="form-group">
-            <label>CPT Codes <span class="text-muted">(comma-sep)</span></label>
-            <input name="cpt_codes" type="text" placeholder="e.g. 99213, 93000">
-          </div>
-          <div class="form-group">
-            <label>Place of Service</label>
-            <select name="place_of_service_code">
-              <option value="">— None —</option>
-              {% for code, label in [('11','11 — Office'),('02','02 — Telehealth'),
-                                      ('21','21 — Inpatient Hospital'),('22','22 — Outpatient Hospital'),
-                                      ('23','23 — Emergency Room'),('20','20 — Urgent Care'),
-                                      ('12','12 — Home Health'),('31','31 — Skilled Nursing')] %}
-              <option value="{{ code }}">{{ label }}</option>
-              {% endfor %}
-            </select>
-          </div>
-          <div class="form-group">
-            <label>Billed Amount ($)</label>
-            <input name="billed_amount" type="number" step="0.01" min="0" placeholder="0.00">
-          </div>
-          <div class="form-group">
-            <label>Allowed Amount ($)</label>
-            <input name="allowed_amount" type="number" step="0.01" min="0" placeholder="0.00">
-          </div>
-          <div class="form-group">
-            <label>Paid Amount ($)</label>
-            <input name="paid_amount" type="number" step="0.01" min="0" placeholder="0.00">
-          </div>
-          <div class="form-group">
-            <label>Patient Responsibility ($)</label>
-            <input name="patient_responsibility" type="number" step="0.01" min="0" placeholder="0.00">
-          </div>
-        </div>
-        <div class="form-actions">
-          <button class="btn btn-primary btn-sm" type="submit">Add Claim</button>
         </div>
       </form>
     </div>
