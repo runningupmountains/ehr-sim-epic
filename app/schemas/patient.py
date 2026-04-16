@@ -22,6 +22,8 @@ class PatientOut(BaseModel):
     state: str | None
     zip_code: str | None
     primary_provider_id: uuid.UUID | None
+    member_id: str | None
+    payer_name: str | None
     created_at: datetime
 
 

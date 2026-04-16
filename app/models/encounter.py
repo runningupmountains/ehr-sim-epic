@@ -45,3 +45,6 @@ class Encounter(Base):
     documents: Mapped[list["Document"]] = relationship(  # noqa: F821
         "Document", back_populates="encounter"
     )
+    claims: Mapped[list["Claim"]] = relationship(  # noqa: F821
+        "Claim", back_populates="encounter"
+    )

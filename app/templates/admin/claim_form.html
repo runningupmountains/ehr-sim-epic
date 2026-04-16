@@ -1,0 +1,165 @@
+{% extends "admin/base.html" %}
+{% block title %}Edit Claim {{ claim.claim_number }} — EHR Sim Admin{% endblock %}
+
+{% block content %}
+<div class="breadcrumb">
+  <a href="/admin">Dashboard</a>
+  <span class="sep">›</span>
+  <a href="/admin/patients">Patients</a>
+  <span class="sep">›</span>
+  <a href="/admin/patients/{{ claim.patient_id }}">Patient</a>
+  <span class="sep">›</span>
+  Edit Claim
+</div>
+
+<div class="page-header">
+  <div>
+    <h1>Edit Claim</h1>
+    <p class="sub font-mono">{{ claim.claim_number }}</p>
+  </div>
+</div>
+
+{% if encounter %}
+<div class="card" style="margin-bottom:16px; border-left:4px solid #60a5fa">
+  <div class="card-body" style="padding:12px 18px">
+    <span class="text-sm text-muted">Encounter:</span>
+    <span style="font-weight:600; margin-left:8px">{{ encounter.encounter_date }}</span>
+    <span class="text-muted"> — {{ encounter.reason_for_visit or encounter.encounter_type }}</span>
+    <span class="font-mono text-xs text-muted" style="margin-left:12px">{{ encounter.external_csn }}</span>
+  </div>
+</div>
+{% endif %}
+
+<div class="card">
+  <div class="card-body">
+    <form method="post" action="/admin/claims/{{ claim.claim_id }}/edit">
+      <div class="form-grid">
+
+        <div class="form-group">
+          <label for="claim_status">Claim Status</label>
+          <select id="claim_status" name="claim_status" required>
+            {% for s in ['draft','submitted','accepted','pending','denied','paid','void'] %}
+            <option value="{{ s }}" {% if claim.claim_status == s %}selected{% endif %}>
+              {{ s|capitalize }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="service_date">Service Date</label>
+          <input id="service_date" name="service_date" type="date" required
+                 value="{{ claim.service_date }}">
+        </div>
+
+        <div class="form-group">
+          <label for="payer_name">Payer / Insurance Plan</label>
+          <input id="payer_name" name="payer_name" type="text"
+                 placeholder="e.g. BlueCross BlueShield PPO"
+                 value="{{ claim.payer_name or '' }}">
+        </div>
+
+        <div class="form-group">
+          <label for="member_id">Member ID</label>
+          <input id="member_id" name="member_id" type="text"
+                 placeholder="e.g. MBR-00123456"
+                 value="{{ claim.member_id or '' }}">
+        </div>
+
+        <div class="form-group">
+          <label for="billed_amount">Billed Amount ($)</label>
+          <input id="billed_amount" name="billed_amount" type="number" step="0.01" min="0"
+                 placeholder="0.00"
+                 value="{{ '%.2f'|format(claim.billed_amount) if claim.billed_amount is not none else '' }}">
+        </div>
+
+        <div class="form-group">
+          <label for="allowed_amount">Allowed Amount ($)</label>
+          <input id="allowed_amount" name="allowed_amount" type="number" step="0.01" min="0"
+                 placeholder="0.00"
+                 value="{{ '%.2f'|format(claim.allowed_amount) if claim.allowed_amount is not none else '' }}">
+        </div>
+
+        <div class="form-group">
+          <label for="paid_amount">Paid Amount ($)</label>
+          <input id="paid_amount" name="paid_amount" type="number" step="0.01" min="0"
+                 placeholder="0.00"
+                 value="{{ '%.2f'|format(claim.paid_amount) if claim.paid_amount is not none else '' }}">
+        </div>
+
+        <div class="form-group">
+          <label for="patient_responsibility">Patient Responsibility ($)</label>
+          <input id="patient_responsibility" name="patient_responsibility" type="number" step="0.01" min="0"
+                 placeholder="0.00"
+                 value="{{ '%.2f'|format(claim.patient_responsibility) if claim.patient_responsibility is not none else '' }}">
+        </div>
+
+        <div class="form-group">
+          <label for="icd10_primary">Primary ICD-10</label>
+          <input id="icd10_primary" name="icd10_primary" type="text"
+                 placeholder="e.g. I10"
+                 value="{{ claim.icd10_primary or '' }}">
+        </div>
+
+        <div class="form-group">
+          <label for="place_of_service_code">Place of Service Code</label>
+          <select id="place_of_service_code" name="place_of_service_code">
+            <option value="">— None —</option>
+            {% for code, label in [('11','11 — Office'),('02','02 — Telehealth'),
+                                    ('21','21 — Inpatient Hospital'),('22','22 — Outpatient Hospital'),
+                                    ('23','23 — Emergency Room'),('20','20 — Urgent Care'),
+                                    ('12','12 — Home Health'),('31','31 — Skilled Nursing')] %}
+            <option value="{{ code }}" {% if claim.place_of_service_code == code %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="form-group form-full">
+          <label for="icd10_codes">Additional ICD-10 Codes <span class="text-muted">(comma-separated)</span></label>
+          <input id="icd10_codes" name="icd10_codes" type="text"
+                 placeholder="e.g. E11.65, Z87.891"
+                 value="{{ claim.icd10_codes or '' }}">
+        </div>
+
+        <div class="form-group form-full">
+          <label for="cpt_codes">CPT Codes <span class="text-muted">(comma-separated)</span></label>
+          <input id="cpt_codes" name="cpt_codes" type="text"
+                 placeholder="e.g. 99213, 93000"
+                 value="{{ claim.cpt_codes or '' }}">
+        </div>
+
+        <div class="form-group">
+          <label for="adjudication_date">Adjudication Date</label>
+          <input id="adjudication_date" name="adjudication_date" type="date"
+                 value="{{ claim.adjudication_date or '' }}">
+        </div>
+
+        <div class="form-group form-full">
+          <label for="denial_reason">Denial Reason</label>
+          <input id="denial_reason" name="denial_reason" type="text"
+                 placeholder="e.g. Service not covered under plan"
+                 value="{{ claim.denial_reason or '' }}">
+        </div>
+
+        <div class="form-group form-full">
+          <label for="notes">Internal Notes</label>
+          <textarea id="notes" name="notes" rows="3"
+                    placeholder="Optional internal notes">{{ claim.notes or '' }}</textarea>
+        </div>
+
+      </div>
+
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit">Save Changes</button>
+        <a class="btn btn-secondary" href="/admin/patients/{{ claim.patient_id }}">Cancel</a>
+      </div>
+    </form>
+
+    <form method="post" action="/admin/claims/{{ claim.claim_id }}/delete"
+          style="margin-top:12px"
+          onsubmit="return confirm('Delete claim {{ claim.claim_number }}? This cannot be undone.')">
+      <button class="btn btn-danger btn-sm" type="submit">Delete Claim</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

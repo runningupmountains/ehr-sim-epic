@@ -6,6 +6,7 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql+psycopg://postgres:postgres@localhost:5432/postgres"
     api_key: str = "dev-ehr-sim-key-change-in-production"
+    admin_key: str = "change-me-admin-key"
     app_env: str = "development"
     log_level: str = "INFO"
 

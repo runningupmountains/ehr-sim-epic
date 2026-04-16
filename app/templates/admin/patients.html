@@ -1,0 +1,62 @@
+{% extends "admin/base.html" %}
+{% block title %}Patients — EHR Sim Admin{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Patients</h1>
+    <p class="sub">{{ total }} simulated patients</p>
+  </div>
+  <div class="page-actions">
+    <a class="btn btn-primary" href="/admin/patients/new">+ New Patient</a>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <form class="search-bar" method="get" action="/admin/patients">
+      <input name="q" placeholder="Search by last name or MRN…" value="{{ q or '' }}" autofocus>
+      <button class="btn btn-primary" type="submit">Search</button>
+      {% if q %}<a class="btn btn-secondary" href="/admin/patients">Clear</a>{% endif %}
+    </form>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>MRN</th>
+          <th>Name</th>
+          <th>DOB</th>
+          <th>Sex</th>
+          <th>Primary Provider</th>
+          <th>City, State</th>
+          <th>Phone</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in patients %}
+        <tr>
+          <td><span class="font-mono text-sm">{{ p.external_mrn }}</span></td>
+          <td><a class="table-link" href="/admin/patients/{{ p.patient_id }}">{{ p.last_name }}, {{ p.first_name }}</a></td>
+          <td class="text-muted">{{ p.dob }}</td>
+          <td>{{ p.sex }}</td>
+          <td class="text-muted">{% if p.primary_provider %}Dr. {{ p.primary_provider.last_name }}{% else %}—{% endif %}</td>
+          <td class="text-muted">{{ p.city or '' }}{% if p.city and p.state %}, {% endif %}{{ p.state or '' }}</td>
+          <td class="text-muted text-sm">{{ p.phone or '—' }}</td>
+          <td>
+            <a class="btn btn-ghost btn-xs" href="/admin/patients/{{ p.patient_id }}">View →</a>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8" class="empty">No patients found{% if q %} for "{{ q }}"{% endif %}.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% if total > 50 %}
+<p class="text-muted text-sm" style="text-align:center">Showing first 50 results.</p>
+{% endif %}
+{% endblock %}

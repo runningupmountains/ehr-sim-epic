@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}EHR Sim Admin{% endblock %}</title>
+  <link rel="stylesheet" href="/static/admin.css">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="header-warning">⚠ Internal EHR Simulator Admin — Fake Data Only</div>
+  <div class="header-inner">
+    <a class="header-brand" href="/admin">EHR<span>Sim</span> Admin</a>
+    <nav class="header-nav">
+      <a class="nav-link {% if active == 'dashboard' %}active{% endif %}" href="/admin">Dashboard</a>
+      <a class="nav-link {% if active == 'patients' %}active{% endif %}"  href="/admin/patients">Patients</a>
+      <a class="nav-link {% if active == 'providers' %}active{% endif %}" href="/admin/providers">Providers</a>
+    </nav>
+    <div class="header-meta">
+      <span>epic-sim-dev</span>
+      <a class="btn btn-secondary btn-sm" href="/docs" target="_blank">API Docs ↗</a>
+      <a class="btn btn-secondary btn-sm" href="/admin/logout">Logout</a>
+    </div>
+  </div>
+</header>
+
+<div class="page-wrap">
+  {% set success = request.query_params.get('success') %}
+  {% set error   = request.query_params.get('error') %}
+  {% if success %}
+    <div class="flash flash-success">✓ {{ success }}</div>
+  {% endif %}
+  {% if error %}
+    <div class="flash flash-error">✕ {{ error }}</div>
+  {% endif %}
+
+  {% block content %}{% endblock %}
+</div>
+
+<script>
+function copyText(text, btn) {
+  navigator.clipboard.writeText(text).then(() => {
+    const orig = btn.textContent;
+    btn.classList.add('copied');
+    btn.textContent = 'Copied!';
+    setTimeout(() => { btn.textContent = orig; btn.classList.remove('copied'); }, 1800);
+  });
+}
+</script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,165 @@
+{% extends "admin/base.html" %}
+{% block title %}{{ 'Edit' if patient else 'New' }} Patient — EHR Sim Admin{% endblock %}
+
+{% block content %}
+<div class="breadcrumb">
+  <a href="/admin">Dashboard</a>
+  <span class="sep">›</span>
+  <a href="/admin/patients">Patients</a>
+  {% if patient %}
+  <span class="sep">›</span>
+  <a href="/admin/patients/{{ patient.patient_id }}">{{ patient.last_name }}, {{ patient.first_name }}</a>
+  <span class="sep">›</span> Edit
+  {% else %}
+  <span class="sep">›</span> New Patient
+  {% endif %}
+</div>
+
+<div class="page-header">
+  <div>
+    <h1>{{ 'Edit Patient' if patient else 'New Patient' }}</h1>
+    {% if patient %}
+    <p class="sub">{{ patient.external_mrn }}</p>
+    {% endif %}
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2>Demographics</h2></div>
+  <div class="card-body">
+    <form method="post" action="{{ '/admin/patients/' + patient.patient_id|string + '/edit' if patient else '/admin/patients/new' }}">
+
+      <div class="form-grid">
+        <div class="form-group">
+          <label for="external_mrn">MRN <span class="text-muted">(Epic-style, e.g. E100031)</span></label>
+          <input id="external_mrn" name="external_mrn" type="text" required
+                 value="{{ patient.external_mrn if patient else '' }}"
+                 {{ 'readonly style="background:#f9fafb;color:#6b7280"' if patient }}>
+        </div>
+        <div class="form-group">
+          <label for="primary_provider_id">Primary Provider</label>
+          <select id="primary_provider_id" name="primary_provider_id">
+            <option value="">— None —</option>
+            {% for prov in providers %}
+            <option value="{{ prov.provider_id }}"
+              {% if patient and patient.primary_provider_id == prov.provider_id %}selected{% endif %}>
+              Dr. {{ prov.first_name }} {{ prov.last_name }} — {{ prov.specialty or 'General' }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="first_name">First Name</label>
+          <input id="first_name" name="first_name" type="text" required
+                 value="{{ patient.first_name if patient else '' }}">
+        </div>
+        <div class="form-group">
+          <label for="last_name">Last Name</label>
+          <input id="last_name" name="last_name" type="text" required
+                 value="{{ patient.last_name if patient else '' }}">
+        </div>
+
+        <div class="form-group">
+          <label for="dob">Date of Birth</label>
+          <input id="dob" name="dob" type="date" required
+                 value="{{ patient.dob if patient else '' }}">
+        </div>
+        <div class="form-group">
+          <label for="sex">Sex</label>
+          <select id="sex" name="sex" required>
+            {% for opt in ['M','F','Other'] %}
+            <option value="{{ opt }}" {% if patient and patient.sex == opt %}selected{% endif %}>{{ opt }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="phone">Phone</label>
+          <input id="phone" name="phone" type="tel"
+                 value="{{ patient.phone if patient else '' }}">
+        </div>
+        <div class="form-group">
+          <label for="email">Email</label>
+          <input id="email" name="email" type="email"
+                 value="{{ patient.email if patient else '' }}">
+        </div>
+
+        <div class="form-group form-full">
+          <label for="address_line1">Address</label>
+          <input id="address_line1" name="address_line1" type="text"
+                 value="{{ patient.address_line1 if patient else '' }}">
+        </div>
+
+        <div class="form-group">
+          <label for="city">City</label>
+          <input id="city" name="city" type="text"
+                 value="{{ patient.city if patient else '' }}">
+        </div>
+        <div class="form-group" style="display:grid; grid-template-columns:80px 1fr; gap:10px; align-items:end">
+          <div class="form-group">
+            <label for="state">State</label>
+            <input id="state" name="state" type="text" maxlength="2" placeholder="IL"
+                   value="{{ patient.state if patient else '' }}">
+          </div>
+          <div class="form-group">
+            <label for="zip_code">ZIP</label>
+            <input id="zip_code" name="zip_code" type="text"
+                   value="{{ patient.zip_code if patient else '' }}">
+          </div>
+        </div>
+      </div>
+
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit">
+          {{ 'Save Changes' if patient else 'Create Patient' }}
+        </button>
+        <a class="btn btn-secondary" href="{{ '/admin/patients/' + patient.patient_id|string if patient else '/admin/patients' }}">
+          Cancel
+        </a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="card" style="margin-top:20px">
+  <div class="card-header"><h2>Insurance</h2></div>
+  <div class="card-body">
+    <form method="post" action="{{ '/admin/patients/' + patient.patient_id|string + '/edit' if patient else '/admin/patients/new' }}">
+      {# Re-submit demographics as hidden so the edit handler gets a full record #}
+      {% if patient %}
+      <input type="hidden" name="first_name"          value="{{ patient.first_name }}">
+      <input type="hidden" name="last_name"           value="{{ patient.last_name }}">
+      <input type="hidden" name="dob"                 value="{{ patient.dob }}">
+      <input type="hidden" name="sex"                 value="{{ patient.sex }}">
+      <input type="hidden" name="phone"               value="{{ patient.phone or '' }}">
+      <input type="hidden" name="email"               value="{{ patient.email or '' }}">
+      <input type="hidden" name="address_line1"       value="{{ patient.address_line1 or '' }}">
+      <input type="hidden" name="city"                value="{{ patient.city or '' }}">
+      <input type="hidden" name="state"               value="{{ patient.state or '' }}">
+      <input type="hidden" name="zip_code"            value="{{ patient.zip_code or '' }}">
+      <input type="hidden" name="primary_provider_id" value="{{ patient.primary_provider_id or '' }}">
+      {% endif %}
+
+      <div class="form-grid">
+        <div class="form-group">
+          <label for="member_id">Member ID</label>
+          <input id="member_id" name="member_id" type="text" placeholder="e.g. MBR-00123456"
+                 value="{{ patient.member_id if patient else '' }}">
+        </div>
+        <div class="form-group">
+          <label for="payer_name">Payer / Insurance Plan</label>
+          <input id="payer_name" name="payer_name" type="text" placeholder="e.g. BlueCross BlueShield PPO"
+                 value="{{ patient.payer_name if patient else '' }}">
+        </div>
+      </div>
+
+      {% if patient %}
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit">Save Insurance</button>
+      </div>
+      {% endif %}
+    </form>
+  </div>
+</div>
+{% endblock %}

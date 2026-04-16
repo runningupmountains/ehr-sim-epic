@@ -27,6 +27,8 @@ class Patient(Base):
     primary_provider_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("providers.provider_id"), nullable=True
     )
+    member_id: Mapped[str | None] = mapped_column(String(100))
+    payer_name: Mapped[str | None] = mapped_column(String(200))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -51,4 +53,7 @@ class Patient(Base):
     )
     documents: Mapped[list["Document"]] = relationship(  # noqa: F821
         "Document", back_populates="patient"
+    )
+    claims: Mapped[list["Claim"]] = relationship(  # noqa: F821
+        "Claim", back_populates="patient"
     )

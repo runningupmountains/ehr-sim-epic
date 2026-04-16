@@ -35,6 +35,8 @@ CREATE TABLE IF NOT EXISTS patients (
     state               CHAR(2),
     zip_code            VARCHAR(10),
     primary_provider_id UUID REFERENCES providers(provider_id),
+    member_id           VARCHAR(100),
+    payer_name          VARCHAR(200),
     created_at          TIMESTAMPTZ  NOT NULL DEFAULT now()
 );
 
@@ -184,3 +186,35 @@ CREATE TABLE IF NOT EXISTS vital_signs (
 
 CREATE INDEX IF NOT EXISTS idx_vitals_encounter ON vital_signs(encounter_id);
 CREATE INDEX IF NOT EXISTS idx_vitals_patient   ON vital_signs(patient_id);
+
+-- -----------------------------------------------------------------------
+-- claims
+-- -----------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS claims (
+    claim_id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    claim_number           VARCHAR(64)   NOT NULL UNIQUE,
+    encounter_id           UUID          NOT NULL REFERENCES encounters(encounter_id),
+    patient_id             UUID          NOT NULL REFERENCES patients(patient_id),
+    payer_name             VARCHAR(200),
+    member_id              VARCHAR(100),
+    claim_status           VARCHAR(50)   NOT NULL DEFAULT 'draft',
+    service_date           VARCHAR(10)   NOT NULL,
+    billed_amount          NUMERIC(10,2),
+    allowed_amount         NUMERIC(10,2),
+    paid_amount            NUMERIC(10,2),
+    patient_responsibility NUMERIC(10,2),
+    icd10_primary          VARCHAR(20),
+    icd10_codes            VARCHAR(500),
+    cpt_codes              VARCHAR(500),
+    place_of_service_code  VARCHAR(10),
+    denial_reason          VARCHAR(500),
+    adjudication_date      VARCHAR(10),
+    notes                  TEXT,
+    created_at             TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    updated_at             TIMESTAMPTZ   NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_claims_encounter   ON claims(encounter_id);
+CREATE INDEX IF NOT EXISTS idx_claims_patient     ON claims(patient_id);
+CREATE INDEX IF NOT EXISTS idx_claims_status      ON claims(claim_status);
+CREATE INDEX IF NOT EXISTS idx_claims_number      ON claims(claim_number);

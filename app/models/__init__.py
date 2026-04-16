@@ -8,6 +8,7 @@ from app.models.problem import Problem
 from app.models.lab_result import LabResult
 from app.models.document import Document
 from app.models.vital_signs import VitalSigns
+from app.models.claim import Claim
 
 __all__ = [
     "Patient",
@@ -20,4 +21,5 @@ __all__ = [
     "LabResult",
     "Document",
     "VitalSigns",
+    "Claim",
 ]

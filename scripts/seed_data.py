@@ -25,6 +25,7 @@ from app.models.medication import Medication
 from app.models.patient import Patient
 from app.models.problem import Problem
 from app.models.provider import Provider
+from app.models.claim import Claim
 from app.models.vital_signs import VitalSigns
 
 # ---------------------------------------------------------------------------
@@ -835,6 +836,112 @@ def seed(db) -> None:  # noqa: C901
         doc_count += 1
 
     print(f"  {doc_count} documents ready.")
+
+    # ------------------------------------------------------------------
+    # Claims
+    # ------------------------------------------------------------------
+    print("Seeding claims...")
+
+    # (patient_idx, csn, payer, member_id, status, service_date,
+    #  billed, allowed, paid, patient_resp,
+    #  icd10_primary, icd10_codes, cpt_codes, pos_code,
+    #  denial_reason, adjudication_date)
+    claim_specs = [
+        # Eleanor Hartley — hypertension follow-up, paid
+        (0, "CSN-10001", "BlueCross BlueShield PPO", "MBR-00100001", "paid",
+         "2025-10-14", 250.00, 195.00, 156.00, 39.00,
+         "I10", "Z87.39", "99213", "11", None, "2025-11-01"),
+        # Eleanor Hartley — cardiology, accepted
+        (0, "CSN-10002", "BlueCross BlueShield PPO", "MBR-00100001", "accepted",
+         "2025-11-05", 480.00, 360.00, None, None,
+         "I25.10", "Z87.39", "99214,93000", "11", None, None),
+        # Marcus Williams — diabetes, paid
+        (1, "CSN-10003", "Aetna HMO", "MBR-00100002", "paid",
+         "2025-09-22", 300.00, 230.00, 184.00, 46.00,
+         "E11.9", "E11.65,Z96.641", "99213", "11", None, "2025-10-15"),
+        # Marcus Williams — endocrinology, submitted
+        (1, "CSN-10004", "Aetna HMO", "MBR-00100002", "submitted",
+         "2025-12-01", 350.00, None, None, None,
+         "E11.9", None, "99214", "11", None, None),
+        # James Thornton — heart failure, paid
+        (3, "CSN-10006", "Medicare Part B", "1EG4-TE5-MK72", "paid",
+         "2025-08-15", 520.00, 415.00, 332.00, 83.00,
+         "I50.9", "I25.10,N18.3", "99215,93306", "11", None, "2025-09-10"),
+        # Margaret Foster — CHF, denied
+        (6, "CSN-10010", "Medicare Advantage", "MBR-00100007", "denied",
+         "2025-07-03", 620.00, 0.00, 0.00, 0.00,
+         "I50.33", "I25.10,E11.9", "99215,93306", "11",
+         "Pre-authorization not obtained for echocardiogram", "2025-08-01"),
+        # Carlos Rivera — orthopedics, paid
+        (7, "CSN-10011", "United Healthcare PPO", "MBR-00100008", "paid",
+         "2025-09-10", 400.00, 310.00, 248.00, 62.00,
+         "M17.11", None, "99213,73562", "11", None, "2025-10-05"),
+        # Carlos Rivera — pre-op, pending
+        (7, "CSN-10012", "United Healthcare PPO", "MBR-00100008", "pending",
+         "2025-12-02", 550.00, None, None, None,
+         "M17.11", "Z96.641", "99215,27447", "11", None, None),
+        # Robert Kim — post-MI follow-up, paid
+        (9, "CSN-10014", "Cigna PPO", "MBR-00100010", "paid",
+         "2025-08-22", 390.00, 295.00, 236.00, 59.00,
+         "I25.10", "Z82.49", "99214,93000", "11", None, "2025-09-18"),
+        # Thomas Anderson — atrial fibrillation, paid
+        (11, "CSN-10016", "Medicare Part B", "2GT5-FF9-LJ41", "paid",
+         "2025-10-07", 430.00, 344.00, 275.00, 69.00,
+         "I48.91", "I50.9", "99214,93000", "11", None, "2025-11-02"),
+        # Priya Patel — hypertension+diabetes, submitted
+        (4, "CSN-10008", "Aetna HMO", "MBR-00100005", "submitted",
+         "2025-10-30", 310.00, None, None, None,
+         "I10", "E11.9", "99213", "11", None, None),
+        # Linda Murphy — COPD follow-up, paid
+        (14, "CSN-10019", "Medicare Part B", "3HK7-AA2-PP19", "paid",
+         "2025-09-05", 360.00, 288.00, 230.00, 58.00,
+         "J44.1", None, "99213,94010", "11", None, "2025-10-01"),
+        # Steven Young — diabetes quarterly, draft
+        (24, "CSN-10029", "BlueCross BlueShield PPO", "MBR-00100025", "draft",
+         "2026-02-10", 295.00, None, None, None,
+         "E11.9", "E03.9", "99213", "11", None, None),
+    ]
+
+    claim_count = 0
+    for (
+        pat_idx, csn, payer, member_id, status, service_date,
+        billed, allowed, paid, pat_resp,
+        icd10_primary, icd10_codes, cpt_codes, pos_code,
+        denial_reason, adj_date
+    ) in claim_specs:
+        pat = patient_objs[pat_idx]
+        enc = encounter_objs.get(csn)
+        if not enc:
+            continue
+        claim_id = _uid(f"claim-{pat.external_mrn}-{csn}")
+        existing = db.query(Claim).filter_by(claim_id=claim_id).first()
+        if existing:
+            continue
+        claim_number = f"CLM-{claim_id.hex[:8].upper()}"
+        claim = Claim(
+            claim_id=claim_id,
+            claim_number=claim_number,
+            encounter_id=enc.encounter_id,
+            patient_id=pat.patient_id,
+            payer_name=payer,
+            member_id=member_id,
+            claim_status=status,
+            service_date=service_date,
+            billed_amount=billed,
+            allowed_amount=allowed,
+            paid_amount=paid,
+            patient_responsibility=pat_resp,
+            icd10_primary=icd10_primary,
+            icd10_codes=icd10_codes,
+            cpt_codes=cpt_codes,
+            place_of_service_code=pos_code,
+            denial_reason=denial_reason,
+            adjudication_date=adj_date,
+        )
+        db.add(claim)
+        claim_count += 1
+
+    print(f"  {claim_count} claims ready.")
 
     db.commit()
     print("\nSeed complete.")

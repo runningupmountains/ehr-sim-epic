@@ -1,0 +1,36 @@
+{% extends "admin/base.html" %}
+{% block title %}Chart JSON — {{ patient_name }} — EHR Sim Admin{% endblock %}
+
+{% block content %}
+<div class="breadcrumb">
+  <a href="/admin">Dashboard</a>
+  <span class="sep">›</span>
+  <a href="/admin/patients">Patients</a>
+  <span class="sep">›</span>
+  <a href="/admin/patients/{{ patient_id }}">{{ patient_name }}</a>
+  <span class="sep">›</span> Raw Chart JSON
+</div>
+
+<div class="page-header">
+  <div>
+    <h1>Raw Chart JSON</h1>
+    <p class="sub">Exactly what ConnectHub receives from <code>/api/epic/v1/patients/{{ patient_id }}/chart</code></p>
+  </div>
+  <div class="page-actions">
+    <button class="btn btn-secondary btn-sm" onclick="copyText(document.getElementById('json-content').textContent, this)">
+      Copy JSON
+    </button>
+    <a class="btn btn-secondary btn-sm" href="/admin/patients/{{ patient_id }}">← Back to Patient</a>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <h2>GET /api/epic/v1/patients/{{ patient_id }}/chart</h2>
+    <span class="badge badge-active">200 OK</span>
+  </div>
+  <div class="json-wrap">
+    <pre id="json-content">{{ chart_json }}</pre>
+  </div>
+</div>
+{% endblock %}
