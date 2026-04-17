@@ -7,10 +7,12 @@ from app.deps import get_db, require_api_key
 from app.models.allergy import Allergy
 from app.models.document import Document
 from app.models.lab_result import LabResult
+from app.models.vital_signs import VitalSigns
 from app.schemas.allergy import AllergyOut
 from app.schemas.chart import ChartOut
 from app.schemas.document import DocumentOut
 from app.schemas.lab_result import LabResultOut
+from app.schemas.vital_signs import VitalSignsOut
 from app.schemas.patient import PatientOut, PatientWithProviderOut
 from app.services import chart_service, encounter_service, patient_service
 from app.schemas.encounter import EncounterWithProviderOut
@@ -95,6 +97,24 @@ def get_patient_labs(
     if since:
         query = query.filter(LabResult.collected_at >= since)
     return query.order_by(LabResult.collected_at.desc()).offset(offset).limit(limit).all()
+
+
+@router.get("/{patient_id}/vital_signs", response_model=list[VitalSignsOut])
+def get_patient_vital_signs(
+    patient_id: uuid.UUID,
+    limit: int = Query(25, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+):
+    _assert_patient_exists(db, patient_id)
+    return (
+        db.query(VitalSigns)
+        .filter(VitalSigns.patient_id == patient_id)
+        .order_by(VitalSigns.recorded_at.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
 
 
 @router.get("/{patient_id}/allergies", response_model=list[AllergyOut])
