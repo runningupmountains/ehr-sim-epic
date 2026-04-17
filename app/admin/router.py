@@ -623,6 +623,50 @@ def add_document(
     return _redirect_patient(patient_id, f"Document added: {title}")
 
 
+# ── Claims list ───────────────────────────────────────────────────────────
+
+@router.get("/claims", response_class=HTMLResponse)
+def claims_list(request: Request, db: Session = Depends(_db)):
+    if not _authed(request):
+        return _redirect_login()
+
+    claims = (
+        db.query(Claim)
+        .options(
+            selectinload(Claim.encounter).selectinload(Encounter.provider),
+            selectinload(Claim.patient),
+        )
+        .order_by(Claim.service_date.desc(), Claim.created_at.desc())
+        .all()
+    )
+
+    # Group claims by encounter, preserving order
+    from collections import OrderedDict
+    enc_map: OrderedDict = OrderedDict()
+    for c in claims:
+        key = str(c.encounter_id)
+        if key not in enc_map:
+            enc_map[key] = {"encounter": c.encounter, "patient": c.patient, "claims": []}
+        enc_map[key]["claims"].append(c)
+
+    status_counts: dict[str, int] = {}
+    for c in claims:
+        status_counts[c.claim_status] = status_counts.get(c.claim_status, 0) + 1
+
+    total_billed = sum(c.billed_amount for c in claims if c.billed_amount is not None)
+    total_paid   = sum(c.paid_amount   for c in claims if c.paid_amount   is not None)
+
+    return templates.TemplateResponse("admin/claims_list.html", {
+        "request":       request,
+        "active":        "claims",
+        "enc_groups":    list(enc_map.values()),
+        "total":         len(claims),
+        "status_counts": status_counts,
+        "total_billed":  total_billed,
+        "total_paid":    total_paid,
+    })
+
+
 # ── Add claim ──────────────────────────────────────────────────────────────
 
 @router.post("/patients/{patient_id}/claims")
@@ -782,4 +826,91 @@ def provider_list(request: Request, db: Session = Depends(_db)):
         "request":   request,
         "active":    "providers",
         "providers": providers,
+    })
+
+
+# ── Provider detail ────────────────────────────────────────────────────────
+
+@router.get("/providers/{provider_id}", response_class=HTMLResponse)
+def provider_detail(request: Request, provider_id: uuid.UUID, db: Session = Depends(_db)):
+    if not _authed(request):
+        return _redirect_login()
+
+    provider = db.query(Provider).filter(Provider.provider_id == provider_id).first()
+    if not provider:
+        return RedirectResponse("/admin/providers?error=Provider+not+found", status_code=302)
+
+    encounters = (
+        db.query(Encounter)
+        .options(selectinload(Encounter.patient))
+        .filter(Encounter.provider_id == provider_id)
+        .order_by(Encounter.encounter_date.desc())
+        .limit(50)
+        .all()
+    )
+    patients = (
+        db.query(Patient)
+        .filter(Patient.primary_provider_id == provider_id)
+        .order_by(Patient.last_name)
+        .all()
+    )
+
+    return templates.TemplateResponse("admin/provider_detail.html", {
+        "request":    request,
+        "active":     "providers",
+        "provider":   provider,
+        "encounters": encounters,
+        "patients":   patients,
+    })
+
+
+# ── Encounters list ────────────────────────────────────────────────────────
+
+@router.get("/encounters", response_class=HTMLResponse)
+def encounter_list(request: Request, db: Session = Depends(_db)):
+    if not _authed(request):
+        return _redirect_login()
+
+    encounters = (
+        db.query(Encounter)
+        .options(selectinload(Encounter.provider), selectinload(Encounter.patient))
+        .order_by(Encounter.encounter_date.desc())
+        .all()
+    )
+
+    # Child records indexed by encounter_id string
+    from app.models.clinical_note import ClinicalNote as _CN
+    from app.models.lab_result    import LabResult    as _LR
+    from app.models.document      import Document     as _Doc
+
+    def _by_enc(items, id_attr="encounter_id") -> dict[str, list]:
+        d: dict[str, list] = {}
+        for item in items:
+            key = str(getattr(item, id_attr))
+            d.setdefault(key, []).append(item)
+        return d
+
+    notes_by_enc  = _by_enc(db.query(_CN).options(selectinload(_CN.provider)).all())
+    labs_by_enc   = _by_enc(db.query(_LR).all())
+    claims_by_enc = _by_enc(db.query(Claim).all())
+    docs_by_enc   = _by_enc(db.query(Document).all())
+
+    # Group encounters by patient, preserving most-recent-first order per patient
+    from collections import OrderedDict
+    patients_map: OrderedDict = OrderedDict()
+    for enc in encounters:
+        key = str(enc.patient_id)
+        if key not in patients_map:
+            patients_map[key] = {"patient": enc.patient, "encounters": []}
+        patients_map[key]["encounters"].append(enc)
+
+    return templates.TemplateResponse("admin/encounters.html", {
+        "request":       request,
+        "active":        "encounters",
+        "patients_map":  list(patients_map.values()),
+        "notes_by_enc":  notes_by_enc,
+        "labs_by_enc":   labs_by_enc,
+        "claims_by_enc": claims_by_enc,
+        "docs_by_enc":   docs_by_enc,
+        "total":         len(encounters),
     })

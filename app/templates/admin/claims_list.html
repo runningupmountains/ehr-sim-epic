@@ -1,0 +1,145 @@
+{% extends "admin/base.html" %}
+{% block title %}Claims — EHR Sim Admin{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Claims</h1>
+    <p class="sub">{{ total }} claim{{ 's' if total != 1 }} across {{ enc_groups|length }} encounter{{ 's' if enc_groups|length != 1 }}</p>
+  </div>
+</div>
+
+{# ── Summary strip ── #}
+<div class="stats-row" style="grid-template-columns:repeat(auto-fit,minmax(110px,1fr)); margin-bottom:20px">
+  <div class="stat-card">
+    <div class="stat-value" style="font-size:20px">{{ total }}</div>
+    <div class="stat-label">Total Claims</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-value" style="font-size:18px; color:#16a34a">${{ "{:,.2f}".format(total_paid) }}</div>
+    <div class="stat-label">Total Paid</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-value" style="font-size:18px">${{ "{:,.2f}".format(total_billed) }}</div>
+    <div class="stat-label">Total Billed</div>
+  </div>
+  {% for s in ['paid','submitted','accepted','pending','denied','draft','void'] %}
+  {% if status_counts.get(s) %}
+  <div class="stat-card">
+    <div class="stat-value" style="font-size:20px">{{ status_counts[s] }}</div>
+    <div class="stat-label">{{ s|capitalize }}</div>
+  </div>
+  {% endif %}
+  {% endfor %}
+</div>
+
+{# ── Encounter groups ── #}
+{% for group in enc_groups %}
+{% set enc = group.encounter %}
+{% set pt  = group.patient %}
+{% set grp_claims = group.claims %}
+
+<div class="card" style="margin-bottom:16px">
+
+  {# ── Encounter header ── #}
+  <div class="card-header enc-patient-header">
+    <div class="d-flex align-center gap-1" style="flex-wrap:wrap; width:100%">
+      <div style="flex:1; min-width:0">
+        {# Patient ── clickable #}
+        <a class="enc-patient-name" href="/admin/patients/{{ pt.patient_id }}">
+          {{ pt.last_name }}, {{ pt.first_name }}
+        </a>
+        <span class="enc-patient-meta">
+          <span class="font-mono text-xs">{{ pt.external_mrn }}</span>
+          {% if pt.payer_name %}
+          <span class="sep">·</span>
+          <span class="badge badge-blue" style="font-size:11px">{{ pt.payer_name }}</span>
+          {% endif %}
+          {% if pt.member_id %}
+          <span class="sep">·</span>
+          <span>Member ID: <span class="font-mono">{{ pt.member_id }}</span></span>
+          {% endif %}
+        </span>
+        {# Encounter details ── second line #}
+        <div style="margin-top:5px; font-size:12px; color:var(--muted); display:flex; gap:10px; flex-wrap:wrap; align-items:center">
+          <span style="font-weight:600; color:var(--text)">{{ enc.encounter_date }}</span>
+          <span class="font-mono text-xs">{{ enc.external_csn }}</span>
+          <span>{{ enc.encounter_type }}{% if enc.visit_type %} · {{ enc.visit_type }}{% endif %}</span>
+          {% if enc.department %}<span>{{ enc.department }}</span>{% endif %}
+          {% if enc.provider %}
+          <a class="provider-link" href="/admin/providers/{{ enc.provider_id }}">Dr. {{ enc.provider.last_name }}</a>
+          {% endif %}
+          {% if enc.reason_for_visit %}
+          <span style="font-style:italic">{{ enc.reason_for_visit }}</span>
+          {% endif %}
+        </div>
+      </div>
+      <div style="display:flex; gap:6px; align-items:center; flex-shrink:0">
+        <span class="badge badge-completed">{{ enc.status }}</span>
+        <span class="badge badge-info">{{ grp_claims|length }} claim{{ 's' if grp_claims|length != 1 }}</span>
+      </div>
+    </div>
+  </div>
+
+  {# ── Claims table ── #}
+  <div class="table-wrap">
+    <table>
+      <thead><tr>
+        <th>Claim #</th>
+        <th>Status</th>
+        <th>Service Date</th>
+        <th>ICD-10</th>
+        <th>CPT Codes</th>
+        <th>Billed</th>
+        <th>Allowed</th>
+        <th>Paid</th>
+        <th>Pt. Resp.</th>
+        <th></th>
+      </tr></thead>
+      <tbody>
+        {% for c in grp_claims %}
+        <tr>
+          <td><span class="font-mono text-xs">{{ c.claim_number }}</span></td>
+          <td>
+            {% if c.claim_status == 'paid' %}<span class="badge badge-active">Paid</span>
+            {% elif c.claim_status == 'denied' %}<span class="badge badge-high">Denied</span>
+            {% elif c.claim_status == 'submitted' %}<span class="badge badge-info">Submitted</span>
+            {% elif c.claim_status == 'accepted' %}<span class="badge badge-completed">Accepted</span>
+            {% elif c.claim_status == 'pending' %}<span class="badge badge-warning">Pending</span>
+            {% elif c.claim_status == 'void' %}<span class="badge badge-inactive">Void</span>
+            {% else %}<span class="badge badge-normal">{{ c.claim_status|capitalize }}</span>{% endif %}
+          </td>
+          <td class="text-muted text-sm">{{ c.service_date }}</td>
+          <td>
+            {% if c.icd10_primary %}<span class="font-mono text-xs badge badge-normal">{{ c.icd10_primary }}</span>{% endif %}
+            {% if c.icd10_codes %}
+            <span class="text-muted text-xs"> {{ c.icd10_codes }}</span>
+            {% endif %}
+          </td>
+          <td class="font-mono text-xs text-muted">{{ c.cpt_codes or '—' }}</td>
+          <td class="text-sm">{% if c.billed_amount  is not none %}${{ "{:,.2f}".format(c.billed_amount)  }}{% else %}—{% endif %}</td>
+          <td class="text-sm">{% if c.allowed_amount is not none %}${{ "{:,.2f}".format(c.allowed_amount) }}{% else %}—{% endif %}</td>
+          <td class="text-sm" style="{% if c.paid_amount is not none %}font-weight:600; color:#16a34a{% endif %}">
+            {% if c.paid_amount is not none %}${{ "{:,.2f}".format(c.paid_amount) }}{% else %}—{% endif %}
+          </td>
+          <td class="text-sm">{% if c.patient_responsibility is not none %}${{ "{:,.2f}".format(c.patient_responsibility) }}{% else %}—{% endif %}</td>
+          <td><a class="btn btn-secondary btn-xs" href="/admin/claims/{{ c.claim_id }}/edit">Edit</a></td>
+        </tr>
+        {% if c.denial_reason %}
+        <tr style="background:#fef2f2">
+          <td colspan="10" class="text-sm" style="color:#991b1b; padding:5px 14px">
+            ⚠ {{ c.denial_reason }}
+          </td>
+        </tr>
+        {% endif %}
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+</div>
+{% else %}
+<div class="card"><div class="empty">No claims found. Add claims from the patient detail page.</div></div>
+{% endfor %}
+
+{% endblock %}

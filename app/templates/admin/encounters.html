@@ -1,0 +1,213 @@
+{% extends "admin/base.html" %}
+{% block title %}Encounters — EHR Sim Admin{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Encounters</h1>
+    <p class="sub">{{ total }} encounters across {{ patients_map|length }} patients — grouped by patient, most recent first</p>
+  </div>
+</div>
+
+{% for group in patients_map %}
+{% set pt = group.patient %}
+{% set pt_encounters = group.encounters %}
+
+<div class="card" style="margin-bottom:16px">
+
+  {# ── Patient group header ── #}
+  <div class="card-header enc-patient-header">
+    <div class="d-flex align-center gap-1" style="flex-wrap:wrap">
+      <div>
+        <a class="enc-patient-name" href="/admin/patients/{{ pt.patient_id }}">
+          {{ pt.last_name }}, {{ pt.first_name }}
+        </a>
+        <span class="enc-patient-meta">
+          <span class="font-mono text-xs">{{ pt.external_mrn }}</span>
+          <span class="sep">·</span>
+          <span>DOB {{ pt.dob }}</span>
+          <span class="sep">·</span>
+          <span>{{ pt.sex }}</span>
+          {% if pt.city %}<span class="sep">·</span><span>{{ pt.city }}, {{ pt.state }}</span>{% endif %}
+        </span>
+      </div>
+      <span class="badge badge-info" style="margin-left:auto">{{ pt_encounters|length }} encounter{{ 's' if pt_encounters|length != 1 }}</span>
+    </div>
+  </div>
+
+  {# ── Encounters for this patient ── #}
+  {% for e in pt_encounters %}
+  {% set enc_key    = e.encounter_id | string %}
+  {% set enc_notes  = notes_by_enc.get(enc_key, []) %}
+  {% set enc_labs   = labs_by_enc.get(enc_key, []) %}
+  {% set enc_claims = claims_by_enc.get(enc_key, []) %}
+  {% set enc_docs   = docs_by_enc.get(enc_key, []) %}
+  {% set child_count = enc_notes|length + enc_labs|length + enc_claims|length + enc_docs|length %}
+
+  <details class="encounter-row">
+    <summary class="encounter-summary">
+      <div class="enc-summary-grid">
+        <span class="enc-date">{{ e.encounter_date }}</span>
+        <span class="font-mono text-xs text-muted">{{ e.external_csn }}</span>
+        <span class="enc-type">{{ e.encounter_type }}{% if e.visit_type %} <span class="text-muted">· {{ e.visit_type }}</span>{% endif %}</span>
+        <span class="text-muted text-sm">{{ e.department or '—' }}</span>
+        <span class="text-sm">
+          {% if e.provider %}
+          <a class="provider-link" href="/admin/providers/{{ e.provider_id }}" onclick="event.stopPropagation()">Dr. {{ e.provider.last_name }}</a>
+          {% else %}—{% endif %}
+        </span>
+        <span class="enc-reason text-muted text-sm">{{ e.reason_for_visit or '—' }}</span>
+        <span class="enc-badges">
+          <span class="badge badge-completed">{{ e.status }}</span>
+          {% if child_count > 0 %}
+          <span class="badge badge-info">{{ child_count }} records</span>
+          {% endif %}
+        </span>
+      </div>
+    </summary>
+
+    <div class="encounter-children">
+
+      {# ── Notes ── #}
+      <div class="enc-section">
+        <div class="enc-section-header">
+          <span class="enc-section-title">Notes ({{ enc_notes|length }})</span>
+        </div>
+        {% if enc_notes %}
+        <table class="enc-table table-hoverable">
+          <thead><tr><th>Signed</th><th>Type</th><th>Title</th><th>Provider</th><th>Preview</th></tr></thead>
+          <tbody>
+            {% for n in enc_notes %}
+            <tr class="clickable-row note-row"
+                onclick="openNoteModal(this)"
+                data-note-title="{{ n.title | e }}"
+                data-note-type="{{ n.note_type | e }}"
+                data-note-provider="{{ n.provider.last_name | e if n.provider else '' }}"
+                data-note-signed="{{ n.signed_at.strftime('%Y-%m-%d') if n.signed_at else '' }}"
+                data-note-body="{{ n.body_text | e }}">
+              <td class="text-muted text-sm">{{ n.signed_at.strftime('%Y-%m-%d') if n.signed_at else '—' }}</td>
+              <td><span class="badge badge-info">{{ n.note_type }}</span></td>
+              <td style="font-weight:600; font-size:13px">{{ n.title }}</td>
+              <td class="text-muted text-sm">
+                {% if n.provider %}
+                <a class="provider-link" href="/admin/providers/{{ n.provider_id }}" onclick="event.stopPropagation()">Dr. {{ n.provider.last_name }}</a>
+                {% else %}—{% endif %}
+              </td>
+              <td><div class="note-body">{{ n.body_text[:120] }}…</div></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <p class="enc-empty">No notes.</p>
+        {% endif %}
+      </div>
+
+      {# ── Labs ── #}
+      <div class="enc-section">
+        <div class="enc-section-header">
+          <span class="enc-section-title">Lab Results ({{ enc_labs|length }})</span>
+        </div>
+        {% if enc_labs %}
+        <table class="enc-table">
+          <thead><tr><th>Collected</th><th>Test</th><th>Result</th><th>Unit</th><th>Ref Range</th><th>Flag</th></tr></thead>
+          <tbody>
+            {% for l in enc_labs %}
+            <tr>
+              <td class="text-muted text-sm">{{ l.collected_at[:10] if l.collected_at else '—' }}</td>
+              <td style="font-weight:600">{{ l.test_name }}</td>
+              <td>{{ l.result_value or '—' }}</td>
+              <td class="text-muted">{{ l.unit or '' }}</td>
+              <td class="text-muted text-xs">{{ l.reference_range or '—' }}</td>
+              <td>
+                {% if l.abnormal_flag in ('HH','LL') %}<span class="badge badge-critical">{{ l.abnormal_flag }}</span>
+                {% elif l.abnormal_flag == 'H' %}<span class="badge badge-high">H</span>
+                {% elif l.abnormal_flag == 'L' %}<span class="badge badge-low">L</span>
+                {% else %}<span class="badge badge-normal">N</span>{% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <p class="enc-empty">No labs.</p>
+        {% endif %}
+      </div>
+
+      {# ── Claims ── #}
+      <div class="enc-section">
+        <div class="enc-section-header">
+          <span class="enc-section-title">Claims ({{ enc_claims|length }})</span>
+        </div>
+        {% if enc_claims %}
+        <table class="enc-table">
+          <thead><tr><th>Claim #</th><th>Payer</th><th>Status</th><th>Billed</th><th>Allowed</th><th>Paid</th><th>ICD-10</th><th></th></tr></thead>
+          <tbody>
+            {% for c in enc_claims %}
+            <tr>
+              <td><span class="font-mono text-xs">{{ c.claim_number }}</span></td>
+              <td class="text-muted text-sm">{{ c.payer_name or '—' }}</td>
+              <td>
+                {% if c.claim_status == 'paid' %}<span class="badge badge-active">Paid</span>
+                {% elif c.claim_status == 'denied' %}<span class="badge badge-high">Denied</span>
+                {% elif c.claim_status == 'submitted' %}<span class="badge badge-info">Submitted</span>
+                {% elif c.claim_status == 'accepted' %}<span class="badge badge-completed">Accepted</span>
+                {% elif c.claim_status == 'pending' %}<span class="badge badge-warning">Pending</span>
+                {% elif c.claim_status == 'void' %}<span class="badge badge-inactive">Void</span>
+                {% else %}<span class="badge badge-normal">{{ c.claim_status|capitalize }}</span>{% endif %}
+              </td>
+              <td class="text-sm">{% if c.billed_amount is not none %}${{ '%.2f'|format(c.billed_amount) }}{% else %}—{% endif %}</td>
+              <td class="text-sm">{% if c.allowed_amount is not none %}${{ '%.2f'|format(c.allowed_amount) }}{% else %}—{% endif %}</td>
+              <td class="text-sm">{% if c.paid_amount is not none %}${{ '%.2f'|format(c.paid_amount) }}{% else %}—{% endif %}</td>
+              <td class="font-mono text-xs">{{ c.icd10_primary or '—' }}</td>
+              <td><a class="btn btn-secondary btn-xs" href="/admin/claims/{{ c.claim_id }}/edit">Edit</a></td>
+            </tr>
+            {% if c.denial_reason %}
+            <tr style="background:#fef2f2">
+              <td colspan="8" class="text-sm" style="color:#991b1b; padding:4px 12px">
+                ⚠ Denial reason: {{ c.denial_reason }}
+              </td>
+            </tr>
+            {% endif %}
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <p class="enc-empty">No claims.</p>
+        {% endif %}
+      </div>
+
+      {# ── Documents ── #}
+      <div class="enc-section enc-section-last">
+        <div class="enc-section-header">
+          <span class="enc-section-title">Documents ({{ enc_docs|length }})</span>
+        </div>
+        {% if enc_docs %}
+        <table class="enc-table">
+          <thead><tr><th>Type</th><th>Title</th><th>Storage Key</th><th>Date</th></tr></thead>
+          <tbody>
+            {% for d in enc_docs %}
+            <tr>
+              <td><span class="badge badge-info">{{ d.document_type }}</span></td>
+              <td style="font-weight:600">{{ d.title }}</td>
+              <td class="text-muted text-xs">{{ d.storage_key or '—' }}</td>
+              <td class="text-muted text-sm">{{ d.created_at.strftime('%Y-%m-%d') if d.created_at else '—' }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <p class="enc-empty">No documents.</p>
+        {% endif %}
+      </div>
+
+    </div>{# /encounter-children #}
+  </details>
+  {% endfor %}{# encounters #}
+
+</div>{# card #}
+{% else %}
+<div class="card"><div class="empty">No encounters found.</div></div>
+{% endfor %}{# patients_map #}
+
+{% endblock %}

@@ -87,6 +87,8 @@ Set the key in `.env` as `API_KEY=...`. ConnectHub should store this key as an e
 
 A stub for future OAuth2 support is noted in `.env.example`.
 
+x-api-key: ehr-sim-admin-2026
+
 ---
 
 ## API Endpoints

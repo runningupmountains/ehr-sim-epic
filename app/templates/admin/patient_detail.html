@@ -101,7 +101,7 @@
         <span class="font-mono text-xs text-muted">{{ e.external_csn }}</span>
         <span class="enc-type">{{ e.encounter_type }}{% if e.visit_type %} <span class="text-muted">· {{ e.visit_type }}</span>{% endif %}</span>
         <span class="text-muted text-sm">{{ e.department or '—' }}</span>
-        <span class="text-muted text-sm">{% if e.provider %}Dr. {{ e.provider.last_name }}{% else %}—{% endif %}</span>
+        <span class="text-muted text-sm">{% if e.provider %}<a class="provider-link" href="/admin/providers/{{ e.provider_id }}">Dr. {{ e.provider.last_name }}</a>{% else %}—{% endif %}</span>
         <span class="enc-reason text-muted text-sm">{{ e.reason_for_visit or '—' }}</span>
         <span class="enc-badges">
           <span class="badge badge-completed">{{ e.status }}</span>
@@ -120,11 +120,17 @@
           <span class="enc-section-title">Notes ({{ enc_notes|length }})</span>
         </div>
         {% if enc_notes %}
-        <table class="enc-table">
+        <table class="enc-table table-hoverable">
           <thead><tr><th>Signed</th><th>Type</th><th>Title</th><th>Provider</th><th>Preview</th></tr></thead>
           <tbody>
             {% for n in enc_notes %}
-            <tr>
+            <tr class="clickable-row note-row"
+                onclick="openNoteModal(this)"
+                data-note-title="{{ n.title | e }}"
+                data-note-type="{{ n.note_type | e }}"
+                data-note-provider="{{ n.provider.last_name | e if n.provider else '' }}"
+                data-note-signed="{{ n.signed_at.strftime('%Y-%m-%d') if n.signed_at else '' }}"
+                data-note-body="{{ n.body_text | e }}">
               <td class="text-muted text-sm">{{ n.signed_at.strftime('%Y-%m-%d') if n.signed_at else '—' }}</td>
               <td><span class="badge badge-info">{{ n.note_type }}</span></td>
               <td style="font-weight:600; font-size:13px">{{ n.title }}</td>
