@@ -15,6 +15,18 @@ router = APIRouter(
 )
 
 
+@router.get("", response_model=list[EncounterWithProviderOut])
+def search_encounters(
+    csn: str | None = Query(None, description="Exact CSN / encounter number, e.g. CSN-10006"),
+    db: Session = Depends(get_db),
+):
+    """Look up an encounter by its CSN (external_csn). Returns 0 or 1 results."""
+    if not csn:
+        return []
+    enc = encounter_service.get_encounter_by_csn(db, csn)
+    return [enc] if enc else []
+
+
 @router.get("/{encounter_id}", response_model=EncounterWithProviderOut)
 def get_encounter(encounter_id: uuid.UUID, db: Session = Depends(get_db)):
     encounter = encounter_service.get_encounter_by_id(db, encounter_id)

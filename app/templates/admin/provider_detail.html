@@ -1,0 +1,120 @@
+{% extends "admin/base.html" %}
+{% block title %}Dr. {{ provider.last_name }}, {{ provider.first_name }} — EHR Sim Admin{% endblock %}
+
+{% block content %}
+<div class="breadcrumb">
+  <a href="/admin">Dashboard</a>
+  <span class="sep">›</span>
+  <a href="/admin/providers">Providers</a>
+  <span class="sep">›</span>
+  Dr. {{ provider.first_name }} {{ provider.last_name }}
+</div>
+
+{# ── Provider Header ── #}
+<div class="patient-header">
+  <div class="d-flex align-center justify-between gap-1" style="flex-wrap:wrap">
+    <div>
+      <h1>Dr. {{ provider.first_name }} {{ provider.last_name }}</h1>
+      <div class="patient-meta" style="margin-top:8px">
+        {% if provider.specialty %}
+        <span class="badge badge-info">{{ provider.specialty }}</span>
+        {% endif %}
+        {% if provider.department %}
+        <span class="sep">·</span>
+        <span class="text-muted">{{ provider.department }}</span>
+        {% endif %}
+        {% if provider.phone %}
+        <span class="sep">·</span>
+        <span class="text-muted">{{ provider.phone }}</span>
+        {% endif %}
+        {% if provider.email %}
+        <span class="sep">·</span>
+        <span class="text-muted">{{ provider.email }}</span>
+        {% endif %}
+      </div>
+      <div class="patient-meta" style="margin-top:6px; font-size:11px">
+        <span class="text-muted">NPI:</span>
+        <span class="font-mono">{{ provider.npi }}</span>
+        <span class="sep">·</span>
+        <span class="text-muted font-mono">provider_id: {{ provider.provider_id }}</span>
+        <button class="copy-btn" onclick="copyText('{{ provider.provider_id }}', this)">Copy ID</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# ── Stats ── #}
+<div class="stats-row" style="grid-template-columns:repeat(2,1fr); max-width:320px; margin-bottom:20px">
+  <div class="stat-card">
+    <div class="stat-value" style="font-size:20px">{{ encounters|length }}</div>
+    <div class="stat-label">Encounters</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-value" style="font-size:20px">{{ patients|length }}</div>
+    <div class="stat-label">Primary Patients</div>
+  </div>
+</div>
+
+{# ── Recent Encounters ── #}
+<div class="card">
+  <div class="card-header">
+    <h2>Encounters ({{ encounters|length }})</h2>
+  </div>
+  <div class="table-wrap">
+    <table class="table-hoverable">
+      <thead><tr>
+        <th>Date</th><th>Patient</th><th>Type</th><th>Department</th><th>Reason</th><th>Status</th>
+      </tr></thead>
+      <tbody>
+        {% for e in encounters %}
+        <tr class="clickable-row" onclick="window.location='/admin/patients/{{ e.patient_id }}'">
+          <td style="font-weight:600">{{ e.encounter_date }}</td>
+          <td>
+            {% if e.patient %}
+            <span style="font-weight:600">{{ e.patient.last_name }}, {{ e.patient.first_name }}</span>
+            <span class="text-muted text-xs font-mono" style="margin-left:6px">{{ e.patient.external_mrn }}</span>
+            {% else %}—{% endif %}
+          </td>
+          <td>{{ e.encounter_type }}{% if e.visit_type %} <span class="text-muted">· {{ e.visit_type }}</span>{% endif %}</td>
+          <td class="text-muted">{{ e.department or '—' }}</td>
+          <td class="text-muted text-sm" style="max-width:240px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis">
+            {{ e.reason_for_visit or '—' }}
+          </td>
+          <td><span class="badge badge-completed">{{ e.status }}</span></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" class="empty">No encounters on record.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{# ── Primary Patients ── #}
+<div class="card">
+  <div class="card-header">
+    <h2>Primary Patients ({{ patients|length }})</h2>
+  </div>
+  <div class="table-wrap">
+    <table class="table-hoverable">
+      <thead><tr>
+        <th>Name</th><th>MRN</th><th>DOB</th><th>Sex</th><th>City</th>
+      </tr></thead>
+      <tbody>
+        {% for pt in patients %}
+        <tr class="clickable-row" onclick="window.location='/admin/patients/{{ pt.patient_id }}'">
+          <td style="font-weight:600">{{ pt.last_name }}, {{ pt.first_name }}</td>
+          <td class="font-mono text-sm">{{ pt.external_mrn }}</td>
+          <td class="text-muted text-sm">{{ pt.dob }}</td>
+          <td class="text-muted">{{ pt.sex }}</td>
+          <td class="text-muted text-sm">{{ pt.city or '—' }}{% if pt.state %}, {{ pt.state }}{% endif %}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" class="empty">No primary patients assigned.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% endblock %}
